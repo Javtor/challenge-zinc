@@ -13,14 +13,21 @@ import (
 	"time"
 )
 
+const (
+	BATCH_SIZE = 10000
+	API_URL    = "http://localhost:4080/api/_bulkv2"
+	INDEX_     = "email"
+)
+
 type EmailJson struct {
 	Header map[string][]string `json:"header"`
 	Body   string              `json:"body"`
 }
 
+// emailPaths returns a list of email file paths in a given directory
 func emailPaths(maildir string) ([]string, error) {
 	// Create a slice to store the emails
-	emails := make([]string, 0)
+	var emails []string
 
 	// Walk the Maildir directory tree and list the files
 	err := filepath.Walk(maildir, func(path string, info os.FileInfo, err error) error {
@@ -39,6 +46,7 @@ func emailPaths(maildir string) ([]string, error) {
 	return emails, nil
 }
 
+// parseEmail reads an email file and returns an EmailJson struct
 func parseEmail(filePath string) (*EmailJson, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -63,18 +71,17 @@ func parseEmail(filePath string) (*EmailJson, error) {
 	return emailJson, nil
 }
 
-func createBatches(paths []string) ([][]string, error) {
-	const BATCH_SIZE = 10000
-
-	numBatches := len(paths) / BATCH_SIZE
-	if len(paths)%BATCH_SIZE != 0 {
+// createBatches returns a 2D slice of strings, with each inner slice representing a batch of file paths
+func createBatches(paths []string, batchSize int) ([][]string, error) {
+	numBatches := len(paths) / batchSize
+	if len(paths)%batchSize != 0 {
 		numBatches++
 	}
 
 	batches := make([][]string, numBatches)
 	for i := 0; i < numBatches; i++ {
-		start := i * BATCH_SIZE
-		end := start + BATCH_SIZE
+		start := i * batchSize
+		end := start + batchSize
 		if end > len(paths) {
 			end = len(paths)
 		}
@@ -83,14 +90,16 @@ func createBatches(paths []string) ([][]string, error) {
 	return batches, nil
 }
 
+// processBatch reads and parses a batch of email files, then uploads the parsed data to the server
 func processBatch(batch []string) error {
 	messages, err := parseEmailBatch(batch)
 	if err != nil {
 		return err
 	}
-	return uploadBatch(messages)
+	return uploadBatch(API_URL, messages)
 }
 
+// parseEmailBatch reads and parses a batch of email files, returning a slice of EmailJson structs
 func parseEmailBatch(batch []string) ([]*EmailJson, error) {
 	var messages []*EmailJson
 	for _, path := range batch {
@@ -107,7 +116,8 @@ func parseEmailBatch(batch []string) ([]*EmailJson, error) {
 	return messages, nil
 }
 
-func uploadBatch(batch []*EmailJson) error {
+// uploadBatch uploads a batch of email data to the server
+func uploadBatch(url string, batch []*EmailJson) error {
 	payload := map[string]interface{}{
 		"index":   "email",
 		"records": batch,
@@ -117,7 +127,6 @@ func uploadBatch(batch []*EmailJson) error {
 		return err
 	}
 
-	url := "http://localhost:4080/api/_bulkv2"
 	req, err := http.NewRequest("POST", url, bytes.NewReader(payloadBytes))
 	if err != nil {
 		return err
@@ -138,13 +147,14 @@ func uploadBatch(batch []*EmailJson) error {
 	return nil
 }
 
+// processMaildir reads email files from a given maildir and uploads them to the server
 func processMaildir(maildir string) error {
 	paths, err := emailPaths(maildir)
 	if err != nil {
 		return err
 	}
 	fmt.Println(len(paths), "emails found.")
-	batches, err := createBatches(paths)
+	batches, err := createBatches(paths, 10000)
 	if err != nil {
 		return err
 	}
@@ -177,6 +187,7 @@ func processMaildir(maildir string) error {
 }
 
 func main() {
+
 	fmt.Println("Starting...")
 	start := time.Now()
 	maildir := "../enron_mail_20110402/maildir"
