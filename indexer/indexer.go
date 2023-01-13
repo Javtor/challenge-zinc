@@ -64,7 +64,7 @@ func parseEmail(filePath string) (*EmailJson, error) {
 }
 
 func createBatches(paths []string) ([][]string, error) {
-	const BATCH_SIZE = 1000
+	const BATCH_SIZE = 10000
 
 	numBatches := len(paths) / BATCH_SIZE
 	if len(paths)%BATCH_SIZE != 0 {
@@ -148,12 +148,29 @@ func processMaildir(maildir string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("Processing %d batches\n", len(batches))
+
+	totalBatches := len(batches)
+	fmt.Printf("Processing %d batches\n", totalBatches)
+
+	startTime := time.Now()
+	lastBatchStart := startTime
 	for i, batch := range batches {
-		fmt.Printf("Processing batch %d of %d\n", i+1, len(batches))
+		fmt.Printf("Processing batch %d of %d...", i+1, totalBatches)
+
+		if i > 0 {
+			elapsed := time.Since(startTime)
+			lastBatchTook := time.Since(lastBatchStart)
+			estimatedRemaining := elapsed / time.Duration(i) * time.Duration(totalBatches-i)
+			fmt.Printf("Last batch: %v, Elapsed time: %v, Estimated time remaining: %v\n", lastBatchTook, elapsed, estimatedRemaining)
+		} else {
+			fmt.Println()
+		}
+
+		lastBatchStart = time.Now()
 		if err := processBatch(batch); err != nil {
 			return err
 		}
+
 	}
 	fmt.Println("Process completed.")
 	return nil
