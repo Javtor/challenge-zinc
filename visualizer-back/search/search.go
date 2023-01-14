@@ -4,15 +4,21 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 )
 
+// Search struct is used to search emails that match the given query
 type Search struct {
+	// searchEndpoint is the endpoint where the search request is sent
 	searchEndpoint string
-	authUsername   string
-	authPassword   string
+	// authUsername is the username used for basic auth
+	authUsername string
+	// authPassword is the password used for basic auth
+	authPassword string
 }
 
+// NewSearch returns a new instance of Search struct with the default values
 func NewSearch() *Search {
 	return &Search{
 		searchEndpoint: "http://localhost:4080/api/email/_search",
@@ -21,6 +27,7 @@ func NewSearch() *Search {
 	}
 }
 
+// ZincSearchRequest represents the body of a search request to Zincsearch
 type ZincSearchRequest struct {
 	SearchType string            `json:"search_type"`
 	Query      map[string]string `json:"query"`
@@ -28,6 +35,7 @@ type ZincSearchRequest struct {
 	MaxResults int               `json:"max_results"`
 }
 
+// ZincSearchResponse represents the response from a search request to Zincsearch
 type ZincSearchResponse struct {
 	Hits struct {
 		Total struct {
@@ -42,6 +50,7 @@ type ZincSearchResponse struct {
 	} `json:"hits"`
 }
 
+// EmailSearchResponse represents the response that will be returned
 type EmailSearchResponse struct {
 	Emails []Email `json:"emails"`
 	Total  int     `json:"total"`
@@ -49,6 +58,7 @@ type EmailSearchResponse struct {
 	Size   int     `json:"size"`
 }
 
+// Email represents an email
 type Email struct {
 	Subject string   `json:"subject"`
 	From    string   `json:"from"`
@@ -56,6 +66,7 @@ type Email struct {
 	Body    string   `json:"body"`
 }
 
+// createSearchRequest creates an HTTP request for a search with the given query and page/perPage parameters
 func (s *Search) createSearchRequest(query string, page, perPage int) (*http.Request, error) {
 	reqBody := ZincSearchRequest{
 		SearchType: "querystring",
@@ -82,6 +93,7 @@ func (s *Search) createSearchRequest(query string, page, perPage int) (*http.Req
 	return req, nil
 }
 
+// mapZincResponseToEmailSearchResponse maps the ZincSearchResponse to an EmailSearchResponse struct
 func (s *Search) mapZincResponseToEmailSearchResponse(zincResponse ZincSearchResponse, page, perPage int) (EmailSearchResponse, error) {
 	var searchResults EmailSearchResponse
 	searchResults.Total = zincResponse.Hits.Total.Value
@@ -97,7 +109,13 @@ func (s *Search) mapZincResponseToEmailSearchResponse(zincResponse ZincSearchRes
 	return searchResults, nil
 }
 
+// PerformSearch performs a search for emails that match the given query, and returns a struct containing the search results.
+// It takes in 3 parameters:
+// - query: a string representing the search query
+// - page: an int representing the page number of the results
+// - perPage: an int representing the number of results per page
 func (s *Search) PerformSearch(query string, page, perPage int) (EmailSearchResponse, error) {
+	log.Printf("Performing search for query: %s", query)
 	req, err := s.createSearchRequest(query, page, perPage)
 	if err != nil {
 		return EmailSearchResponse{}, err
@@ -106,18 +124,17 @@ func (s *Search) PerformSearch(query string, page, perPage int) (EmailSearchResp
 	httpClient := &http.Client{}
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return EmailSearchResponse{}, fmt.Errorf("error sending request: %w", err)
+		log.Printf("Error performing search: %v", err)
+		return EmailSearchResponse{}, fmt.Errorf("error performing search: %w", err)
 	}
+	log.Printf("Search completed successfully")
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return EmailSearchResponse{}, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-	}
-
-	var zincResp ZincSearchResponse
-	if err := json.NewDecoder(resp.Body).Decode(&zincResp); err != nil {
+	var zincResponse ZincSearchResponse
+	err = json.NewDecoder(resp.Body).Decode(&zincResponse)
+	if err != nil {
 		return EmailSearchResponse{}, fmt.Errorf("error decoding response: %w", err)
 	}
 
-	return s.mapZincResponseToEmailSearchResponse(zincResp, page, perPage)
+	return s.mapZincResponseToEmailSearchResponse(zincResponse, page, perPage)
 }
