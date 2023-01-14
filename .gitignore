@@ -23,3 +23,4 @@ go.work
 #email dataset
 enron_mail_20110402.tgz
 enron_mail_20110402/
+maildir_benchmark/
