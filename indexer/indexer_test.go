@@ -190,7 +190,5 @@ func TestParseEmailBatchMalformedHeaders(t *testing.T) {
 
 func BenchmarkProcessMaildir(b *testing.B) {
 	maildir := "../enron_mail_20110402/maildir"
-	for i := 0; i < b.N; i++ {
-		processMaildir(maildir)
-	}
+	processMaildir(maildir)
 }

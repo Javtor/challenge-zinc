@@ -3,8 +3,10 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"flag"
 	"fmt"
-	"io/ioutil"
+	"io"
+	"log"
 	"net/http"
 	"net/mail"
 	"os"
@@ -16,7 +18,7 @@ import (
 const (
 	BATCH_SIZE = 10000
 	API_URL    = "http://localhost:4080/api/_bulkv2"
-	INDEX_     = "email"
+	INDEX      = "email"
 )
 
 type EmailJson struct {
@@ -50,6 +52,7 @@ func emailPaths(maildir string) ([]string, error) {
 func parseEmail(filePath string) (*EmailJson, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
+		log.Printf("Error opening file %s: %v", filePath, err)
 		return nil, err
 	}
 	defer file.Close()
@@ -57,16 +60,23 @@ func parseEmail(filePath string) (*EmailJson, error) {
 	msg, err := mail.ReadMessage(file)
 	if err != nil {
 		if strings.Contains(err.Error(), "malformed MIME header") {
-			// handle malformed header, maybe just ignoring the email
+			log.Printf("Email %s ignored due to malformed headers", filePath)
 			return nil, fmt.Errorf("email %s ignored due to malformed headers", filePath)
 		} else {
+			log.Printf("Error reading email %s: %v", filePath, err)
 			return nil, err
 		}
 	}
-	body, _ := ioutil.ReadAll(msg.Body)
+
+	buf := new(strings.Builder)
+	_, err = io.Copy(buf, msg.Body)
+
+	if err != nil {
+		return nil, err
+	}
 	emailJson := &EmailJson{
 		Header: msg.Header,
-		Body:   string(body),
+		Body:   buf.String(),
 	}
 	return emailJson, nil
 }
@@ -92,34 +102,42 @@ func createBatches(paths []string, batchSize int) ([][]string, error) {
 
 // processBatch reads and parses a batch of email files, then uploads the parsed data to the server
 func processBatch(batch []string) error {
+	log.Println("Starting processing of batch")
 	messages, err := parseEmailBatch(batch)
 	if err != nil {
 		return err
 	}
+	log.Println("Finishing processing of batch")
 	return uploadBatch(API_URL, messages)
 }
 
 // parseEmailBatch reads and parses a batch of email files, returning a slice of EmailJson structs
 func parseEmailBatch(batch []string) ([]*EmailJson, error) {
-	var messages []*EmailJson
+	messages := make([]*EmailJson, len(batch))
+	i := 0
 	for _, path := range batch {
 		msg, err := parseEmail(path)
 		if err != nil {
 			if strings.Contains(err.Error(), "ignored due to malformed headers") {
 				continue
 			} else {
+				log.Printf("Error parsing email %s: %v", path, err)
 				return nil, err
 			}
 		}
-		messages = append(messages, msg)
+		messages[i] = msg
+		i++
 	}
+	//remove nil entries
+	messages = messages[:i]
+
 	return messages, nil
 }
 
 // uploadBatch uploads a batch of email data to the server
 func uploadBatch(url string, batch []*EmailJson) error {
 	payload := map[string]interface{}{
-		"index":   "email",
+		"index":   INDEX,
 		"records": batch,
 	}
 	payloadBytes, err := json.Marshal(payload)
@@ -136,6 +154,7 @@ func uploadBatch(url string, batch []*EmailJson) error {
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
+		log.Printf("Error uploading batch: %v", err)
 		return err
 	}
 	defer resp.Body.Close()
@@ -153,27 +172,28 @@ func processMaildir(maildir string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println(len(paths), "emails found.")
-	batches, err := createBatches(paths, 10000)
+	log.Println(len(paths), "emails found.")
+
+	batches, err := createBatches(paths, BATCH_SIZE)
 	if err != nil {
 		return err
 	}
 
 	totalBatches := len(batches)
-	fmt.Printf("Processing %d batches\n", totalBatches)
+	log.Printf("Processing %d batches\n", totalBatches)
 
 	startTime := time.Now()
 	lastBatchStart := startTime
 	for i, batch := range batches {
-		fmt.Printf("Processing batch %d of %d...", i+1, totalBatches)
+		log.Printf("Processing batch %d of %d...", i+1, totalBatches)
 
 		if i > 0 {
 			elapsed := time.Since(startTime)
 			lastBatchTook := time.Since(lastBatchStart)
 			estimatedRemaining := elapsed / time.Duration(i) * time.Duration(totalBatches-i)
-			fmt.Printf("Last batch: %v, Elapsed time: %v, Estimated time remaining: %v\n", lastBatchTook, elapsed, estimatedRemaining)
+			log.Printf("Last batch: %v, Elapsed time: %v, Estimated time remaining: %v\n", lastBatchTook, elapsed, estimatedRemaining)
 		} else {
-			fmt.Println()
+			log.Println()
 		}
 
 		lastBatchStart = time.Now()
@@ -182,21 +202,32 @@ func processMaildir(maildir string) error {
 		}
 
 	}
-	fmt.Println("Process completed.")
+	log.Println("Process completed.")
 	return nil
 }
 
 func main() {
 
-	fmt.Println("Starting...")
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage: %s <maildir>\n", os.Args[0])
+	}
+	flag.Parse()
+	maildir := flag.Arg(0)
+	if maildir == "" {
+		fmt.Println("Error: No maildir path provided")
+		flag.Usage()
+		os.Exit(1)
+	}
+
+	log.Println("Starting the program")
 	start := time.Now()
-	maildir := "../enron_mail_20110402/maildir"
 	err := processMaildir(maildir)
 	if err != nil {
-		fmt.Println("Error processing maildir: ", err)
-		return
+		log.Println("Error processing maildir: ", err)
+		os.Exit(1)
 	}
-	fmt.Println("Maildir processed successfully")
+
+	log.Println("Maildir processed successfully")
 	elapsed := time.Since(start)
-	fmt.Printf("Time taken: %s\n", elapsed)
+	log.Printf("Time taken: %s\n", elapsed)
 }
