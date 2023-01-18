@@ -17,7 +17,7 @@ import (
 
 const (
 	BATCH_SIZE = 10000
-	API_URL    = "http://localhost:4080/api/_bulkv2"
+	API_URL    = "http://zinc:4080/api/_bulkv2"
 	INDEX      = "email"
 )
 

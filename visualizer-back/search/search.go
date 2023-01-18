@@ -21,7 +21,7 @@ type Search struct {
 // NewSearch returns a new instance of Search struct with the default values
 func NewSearch() *Search {
 	return &Search{
-		searchEndpoint: "http://localhost:4080/api/email/_search",
+		searchEndpoint: "http://zinc:4080/api/email/_search",
 		authUsername:   "admin",
 		authPassword:   "Complexpass#123",
 	}
