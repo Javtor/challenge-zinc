@@ -6,6 +6,8 @@ RUN npm install -g http-server
 # Set the working directory
 WORKDIR /visualizer-front
 
+RUN git checkout docker
+
 # Clone the repository
 RUN git clone https://github.com/Javtor/challenge-zinc.git .
 

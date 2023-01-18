@@ -6,6 +6,8 @@ WORKDIR /indexer
 # Clone the repository
 RUN git clone https://github.com/Javtor/challenge-zinc.git .
 
+RUN git checkout docker
+
 # Download the data.tgz
 RUN wget http://www.cs.cmu.edu/~enron/enron_mail_20110402.tgz
 
