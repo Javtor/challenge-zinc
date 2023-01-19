@@ -6,6 +6,8 @@ WORKDIR /indexer
 # Clone the repository
 RUN git clone https://github.com/Javtor/challenge-zinc.git .
 
+RUN git fetch
+
 RUN git checkout docker
 
 # Download the data.tgz

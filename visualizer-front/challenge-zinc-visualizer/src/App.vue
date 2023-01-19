@@ -83,7 +83,7 @@ export default {
     },
     async searchEmails() {
       this.loading = true
-      const { data } = await axios.get(`http://challenge-zinc-visualizer-back:3000/search?q=${this.query}&page=${this.page}&per_page=${this.perPage}`)
+      const { data } = await axios.get(`http://localhost:3000/search?q=${this.query}&page=${this.page}&per_page=${this.perPage}`)
       this.emails = data.emails
       this.totalEmails = data.total
       this.loading = false
